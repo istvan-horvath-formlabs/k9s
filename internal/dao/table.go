@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	metav1beta1 "k8s.io/apimachinery/pkg/apis/meta/v1beta1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -19,7 +20,6 @@ import (
 )
 
 const (
-	gvFmt       = "application/json;as=Table;v=%s;g=%s, application/json"
 	includeMeta = "Metadata"
 	includeObj  = "Object"
 	includeNone = "None"
@@ -42,9 +42,8 @@ func (t *Table) Get(ctx context.Context, path string) (runtime.Object, error) {
 	}
 
 	ns, n := client.Namespaced(path)
-	a := fmt.Sprintf(gvFmt, metav1.SchemeGroupVersion.Version, metav1.GroupName)
 	req := c.Get().
-		SetHeader("Accept", a).
+		SetHeader("Accept", header).
 		Name(n).
 		Resource(t.gvr.R()).
 		VersionedParams(&metav1.TableOptions{}, p)
@@ -167,6 +166,8 @@ func (t *Table) codec() (serializer.CodecFactory, runtime.ParameterCodec) {
 	metav1.AddToGroupVersion(genScheme, gv)
 	genScheme.AddKnownTypes(gv, &tt, &opts)
 	genScheme.AddKnownTypes(metav1.SchemeGroupVersion, &tt, &opts)
+	// Servers older than 1.15 only serve v1beta1 tables.
+	genScheme.AddKnownTypes(metav1beta1.SchemeGroupVersion, &tt, &opts)
 
 	return serializer.NewCodecFactory(genScheme), runtime.NewParameterCodec(genScheme)
 }

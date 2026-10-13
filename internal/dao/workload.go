@@ -119,7 +119,7 @@ func (a *Workload) List(ctx context.Context, ns string) ([]runtime.Object, error
 			oo = append(oo, &render.WorkloadRes{Row: metav1.TableRow{Cells: []any{
 				gvr.String(),
 				ns,
-				r.Cells[indexOf("Name", table.ColumnDefinitions)],
+				cellOrBlank(&r, "Name", table.ColumnDefinitions),
 				stat,
 				readiness(gvr, &r, table.ColumnDefinitions),
 				validity(stat),
@@ -135,12 +135,10 @@ func (a *Workload) List(ctx context.Context, ns string) ([]runtime.Object, error
 
 func readiness(gvr *client.GVR, r *metav1.TableRow, h []metav1.TableColumnDefinition) string {
 	switch gvr {
-	case client.PodGVR, client.DpGVR, client.StsGVR:
-		return r.Cells[indexOf("Ready", h)].(string)
-	case client.RsGVR, client.DsGVR:
-		c := r.Cells[indexOf("Ready", h)].(int64)
-		d := r.Cells[indexOf("Desired", h)].(int64)
-		return fmt.Sprintf("%d/%d", c, d)
+	case client.PodGVR, client.DpGVR, client.StsGVR, client.RsGVR, client.DsGVR:
+		if ready, ok := readyCell(gvr, r, h); ok {
+			return ready
+		}
 	case client.SvcGVR:
 		return ""
 	}
@@ -151,30 +149,16 @@ func readiness(gvr *client.GVR, r *metav1.TableRow, h []metav1.TableColumnDefini
 func status(gvr *client.GVR, r *metav1.TableRow, h []metav1.TableColumnDefinition) string {
 	switch gvr {
 	case client.PodGVR:
-		if status := r.Cells[indexOf("Status", h)]; status == render.PhaseCompleted {
+		status, _ := cell(r, "Status", h)
+		if status == render.PhaseCompleted {
 			return StatusOK
-		} else if !isReady(r.Cells[indexOf("Ready", h)].(string)) || status != render.PhaseRunning {
+		}
+		if ready, ok := readyCell(gvr, r, h); !ok || !isReady(ready) || status != render.PhaseRunning {
 			return DegradedStatus
 		}
-	case client.DpGVR, client.StsGVR:
-		if !isReady(r.Cells[indexOf("Ready", h)].(string)) {
+	case client.DpGVR, client.StsGVR, client.RsGVR, client.DsGVR:
+		if ready, ok := readyCell(gvr, r, h); ok && !isReady(ready) {
 			return DegradedStatus
-		}
-	case client.RsGVR, client.DsGVR:
-		rd, ok1 := r.Cells[indexOf("Ready", h)].(int64)
-		de, ok2 := r.Cells[indexOf("Desired", h)].(int64)
-		if ok1 && ok2 {
-			if !isReady(fmt.Sprintf("%d/%d", rd, de)) {
-				return DegradedStatus
-			}
-			break
-		}
-		rds, oks1 := r.Cells[indexOf("Ready", h)].(string)
-		des, oks2 := r.Cells[indexOf("Desired", h)].(string)
-		if oks1 && oks2 {
-			if !isReady(fmt.Sprintf("%s/%s", rds, des)) {
-				return DegradedStatus
-			}
 		}
 	case client.SvcGVR:
 	default:
@@ -182,6 +166,54 @@ func status(gvr *client.GVR, r *metav1.TableRow, h []metav1.TableColumnDefinitio
 	}
 
 	return StatusOK
+}
+
+// readyCell returns a ready/desired ratio for a workload row.
+// Older API servers do not serve a Ready column for deployments and statefulsets.
+func readyCell(gvr *client.GVR, r *metav1.TableRow, h []metav1.TableColumnDefinition) (string, bool) {
+	switch gvr {
+	case client.RsGVR, client.DsGVR:
+		return ratio(r, h, "Ready", "Desired")
+	}
+	if ready, ok := cell(r, "Ready", h); ok {
+		s, ok := ready.(string)
+		return s, ok
+	}
+	switch gvr {
+	case client.DpGVR:
+		return ratio(r, h, "Available", "Desired")
+	case client.StsGVR:
+		return ratio(r, h, "Current", "Desired")
+	}
+
+	return "", false
+}
+
+func ratio(r *metav1.TableRow, h []metav1.TableColumnDefinition, num, den string) (string, bool) {
+	n, ok1 := cell(r, num, h)
+	d, ok2 := cell(r, den, h)
+	if !ok1 || !ok2 {
+		return "", false
+	}
+
+	return fmt.Sprintf("%v/%v", n, d), true
+}
+
+func cell(r *metav1.TableRow, n string, h []metav1.TableColumnDefinition) (any, bool) {
+	idx := indexOf(n, h)
+	if idx < 0 || idx >= len(r.Cells) {
+		return nil, false
+	}
+
+	return r.Cells[idx], true
+}
+
+func cellOrBlank(r *metav1.TableRow, n string, h []metav1.TableColumnDefinition) any {
+	if v, ok := cell(r, n, h); ok {
+		return v
+	}
+
+	return ""
 }
 
 func validity(status string) string {
