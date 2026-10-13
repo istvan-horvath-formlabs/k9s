@@ -75,7 +75,7 @@ func ScanForRefs(ctx context.Context, f Factory) (Refs, error) {
 		wg.Add(1)
 		go func(ctx context.Context, gvr *client.GVR, s RefScanner, out chan Refs, wait bool) {
 			defer wg.Done()
-			s.Init(f, gvr)
+			s.Init(f, MetaAccess.Served(gvr))
 			refs, err := s.Scan(ctx, rgvr, fqn, wait)
 			if err != nil {
 				slog.Error("Reference scan failed for",

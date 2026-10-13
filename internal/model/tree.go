@@ -237,7 +237,7 @@ func (t *Tree) reconcile(ctx context.Context) error {
 }
 
 func (t *Tree) resourceMeta() ResourceMeta {
-	meta, ok := Registry[t.gvr]
+	meta, ok := Registry[client.Canonical(t.gvr)]
 	if !ok {
 		meta = ResourceMeta{
 			DAO:      &dao.Table{},

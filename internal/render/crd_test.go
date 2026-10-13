@@ -27,3 +27,16 @@ func TestCustomResourceDefinitionRender(t *testing.T) {
 		r.Fields[6],
 	)
 }
+
+func TestCustomResourceDefinitionRenderV1beta1(t *testing.T) {
+	c := render.CustomResourceDefinition{}
+	r := model1.NewRow(2)
+
+	require.NoError(t, c.Render(load(t, "crd_v1beta1"), "", &r))
+	assert.Equal(t, "-/certificates.certmanager.k8s.io", r.ID)
+	assert.Equal(t, "certificates", r.Fields[0])
+	assert.Equal(t, "certmanager.k8s.io", r.Fields[1])
+	assert.Equal(t, "Certificate", r.Fields[2])
+	assert.Equal(t, "v1alpha1", r.Fields[3])
+	assert.Empty(t, r.Fields[7])
+}

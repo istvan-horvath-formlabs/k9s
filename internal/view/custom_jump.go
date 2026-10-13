@@ -29,7 +29,7 @@ func customJump(app *App, sourceGVR *client.GVR, sourcePath string, rule *config
 	}
 
 	// Parse target GVR
-	targetGVR := client.NewGVR(rule.TargetGVR)
+	targetGVR := dao.MetaAccess.Served(client.NewGVR(rule.TargetGVR))
 
 	// Determine target namespace
 	targetNS, err := determineTargetNamespace(sourcePath, rule.TargetNamespace, sourceObj)
@@ -39,7 +39,7 @@ func customJump(app *App, sourceGVR *client.GVR, sourcePath string, rule *config
 
 	// Use the registered viewer so built-in enter-chains (e.g. deploy -> pods -> logs) still work.
 	var v ResourceViewer
-	if mv, ok := customViewers[targetGVR]; ok {
+	if mv, ok := customViewers[client.Canonical(targetGVR)]; ok {
 		if mv.viewerFn != nil {
 			v = mv.viewerFn(targetGVR)
 		} else {

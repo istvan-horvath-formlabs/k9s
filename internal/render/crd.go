@@ -14,7 +14,6 @@ import (
 	"github.com/derailed/k9s/internal/slogs"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 var defaultCRDHeader = model1.Header{
@@ -60,8 +59,7 @@ func (c CustomResourceDefinition) Render(o any, _ string, row *model1.Row) error
 
 // defaultRow populates the row fields with Deployment data.
 func (c CustomResourceDefinition) defaultRow(raw *unstructured.Unstructured, r *model1.Row) error {
-	var crd v1.CustomResourceDefinition
-	err := runtime.DefaultUnstructuredConverter.FromUnstructured(raw.Object, &crd)
+	crd, err := client.CRDFromUnstructured(raw.Object)
 	if err != nil {
 		return err
 	}

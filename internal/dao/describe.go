@@ -54,5 +54,22 @@ func Describe(c client.Connection, gvr *client.GVR, path string) (string, error)
 		return "", err
 	}
 
-	return d.Describe(ns, n, describe.DescriberSettings{ShowEvents: true})
+	settings := describe.DescriberSettings{ShowEvents: true}
+	desc, err := d.Describe(ns, n, settings)
+	if err == nil || client.Canonical(gvr) == gvr {
+		return desc, err
+	}
+
+	// Typed describers only know about the latest API version. Fall back to a
+	// generic describer when an older cluster serves a legacy version.
+	cfg, e := c.RestConfig()
+	if e != nil {
+		return desc, err
+	}
+	gd, ok := describe.GenericDescriberFor(mapping, cfg)
+	if !ok {
+		return desc, err
+	}
+
+	return gd.Describe(ns, n, settings)
 }

@@ -480,6 +480,7 @@ func (t TreeNode) toEmojiTitle() (title string) {
 }
 
 func toEmoji(gvr *client.GVR) string {
+	gvr = client.Canonical(gvr)
 	if e := v1Emoji(gvr); e != "" {
 		return e
 	}

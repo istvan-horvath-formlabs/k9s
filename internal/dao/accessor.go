@@ -45,7 +45,7 @@ type Accessors map[*client.GVR]Accessor
 // Otherwise it returns a generic accessor.
 // Customize here for non resource types or types with metrics or logs.
 func AccessorFor(f Factory, gvr *client.GVR) (Accessor, error) {
-	r, ok := accessors[gvr]
+	r, ok := accessors[client.Canonical(gvr)]
 	if !ok {
 		r = new(Scaler)
 		slog.Debug("No DAO registry entry. Using generics!", slogs.GVR, gvr)

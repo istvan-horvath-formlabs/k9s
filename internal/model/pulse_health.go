@@ -121,7 +121,7 @@ func (h *PulseHealth) check(ctx context.Context, ns string, gvr *client.GVR) (He
 		meta.DAO = &dao.Resource{}
 	}
 
-	meta.DAO.Init(h.factory, gvr)
+	meta.DAO.Init(h.factory, dao.MetaAccess.Served(gvr))
 	oo, err := meta.DAO.List(ctx, ns)
 	if err != nil {
 		return HealthPoint{}, err

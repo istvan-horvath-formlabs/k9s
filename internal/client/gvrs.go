@@ -82,6 +82,42 @@ var (
 	RobGVR  = NewGVR("rbac.authorization.k8s.io/v1/rolebindings")
 )
 
+// LegacyGVRs tracks older API versions of resources k9s customizes, most preferred
+// first. Older clusters may only serve one of these instead of the canonical GVR.
+var LegacyGVRs = map[*GVR]GVRs{
+	DpGVR:  {NewGVR("extensions/v1beta1/deployments")},
+	DsGVR:  {NewGVR("extensions/v1beta1/daemonsets")},
+	RsGVR:  {NewGVR("extensions/v1beta1/replicasets")},
+	EvGVR:  {NewGVR("events.k8s.io/v1beta1/events"), NewGVR("v1/events")},
+	CjGVR:  {NewGVR("batch/v1beta1/cronjobs")},
+	CrdGVR: {NewGVR("apiextensions.k8s.io/v1beta1/customresourcedefinitions")},
+	NpGVR:  {NewGVR("extensions/v1beta1/networkpolicies")},
+	PdbGVR: {NewGVR("policy/v1beta1/poddisruptionbudgets")},
+	PspGVR: {NewGVR("extensions/v1beta1/podsecuritypolicies")},
+	IngGVR: {NewGVR("networking.k8s.io/v1beta1/ingresses"), NewGVR("extensions/v1beta1/ingresses")},
+}
+
+var canonicalGVRs = func() map[*GVR]*GVR {
+	mm := make(map[*GVR]*GVR)
+	for gvr, legacy := range LegacyGVRs {
+		for _, l := range legacy {
+			mm[l] = gvr
+		}
+	}
+
+	return mm
+}()
+
+// Canonical returns the GVR k9s registers views, renderers and accessors under.
+// Legacy API versions map to their current counterpart, other GVRs map to themselves.
+func Canonical(gvr *GVR) *GVR {
+	if c, ok := canonicalGVRs[gvr]; ok {
+		return c
+	}
+
+	return gvr
+}
+
 var reservedGVRs = sets.New(
 	CpuGVR,
 	MemGVR,

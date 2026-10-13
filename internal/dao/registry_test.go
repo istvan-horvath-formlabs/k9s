@@ -5,6 +5,8 @@ package dao
 
 import (
 	"errors"
+	"maps"
+	"slices"
 	"testing"
 
 	"github.com/derailed/k9s/internal/client"
@@ -119,4 +121,81 @@ func TestAddCRDPropertiesMarksK8sIOCRD(t *testing.T) {
 	assert.True(t, IsCRD(gatewayMeta))
 	assert.Equal(t, []string{"gateway-api", crdCat}, gatewayMeta.Categories)
 	assert.False(t, IsCRD(ingressMeta))
+}
+
+func TestDropShadowed(t *testing.T) {
+	var (
+		v1Ev   = client.NewGVR("v1/events")
+		v1b1Ev = client.NewGVR("events.k8s.io/v1beta1/events")
+		extDp  = client.NewGVR("extensions/v1beta1/deployments")
+		extIng = client.NewGVR("extensions/v1beta1/ingresses")
+		v1b1Cj = client.NewGVR("batch/v1beta1/cronjobs")
+	)
+	uu := map[string]struct {
+		served client.GVRs
+		e      client.GVRs
+	}{
+		"modern": {
+			served: client.GVRs{client.DpGVR, client.EvGVR, v1Ev, client.IngGVR, client.CjGVR},
+			e:      client.GVRs{client.DpGVR, client.EvGVR, client.IngGVR, client.CjGVR},
+		},
+		"legacy": {
+			served: client.GVRs{client.DpGVR, extDp, v1b1Ev, v1Ev, extIng, v1b1Cj},
+			e:      client.GVRs{client.DpGVR, v1b1Ev, extIng, v1b1Cj},
+		},
+	}
+
+	for k := range uu {
+		u := uu[k]
+		t.Run(k, func(t *testing.T) {
+			m := make(ResourceMetas, len(u.served))
+			for _, gvr := range u.served {
+				m[gvr] = new(metav1.APIResource)
+			}
+			dropShadowed(m)
+			assert.ElementsMatch(t, u.e, client.GVRs(slices.Collect(maps.Keys(m))))
+		})
+	}
+}
+
+func TestServed(t *testing.T) {
+	var (
+		v1Ev   = client.NewGVR("v1/events")
+		v1b1Ev = client.NewGVR("events.k8s.io/v1beta1/events")
+	)
+	uu := map[string]struct {
+		served client.GVRs
+		gvr, e *client.GVR
+	}{
+		"canonical": {
+			served: client.GVRs{client.EvGVR, v1Ev},
+			gvr:    client.EvGVR,
+			e:      client.EvGVR,
+		},
+		"preferred-legacy": {
+			served: client.GVRs{v1b1Ev, v1Ev},
+			gvr:    client.EvGVR,
+			e:      v1b1Ev,
+		},
+		"fallback-legacy": {
+			served: client.GVRs{v1Ev},
+			gvr:    client.EvGVR,
+			e:      v1Ev,
+		},
+		"not-served": {
+			gvr: client.CjGVR,
+			e:   client.CjGVR,
+		},
+	}
+
+	for k := range uu {
+		u := uu[k]
+		t.Run(k, func(t *testing.T) {
+			m := NewMeta()
+			for _, gvr := range u.served {
+				m.resMetas[gvr] = new(metav1.APIResource)
+			}
+			assert.Same(t, u.e, m.Served(u.gvr))
+		})
+	}
 }

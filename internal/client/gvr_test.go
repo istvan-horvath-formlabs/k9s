@@ -10,6 +10,7 @@ import (
 
 	"github.com/derailed/k9s/internal/client"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -192,6 +193,82 @@ func TestToString(t *testing.T) {
 		u := uu[k]
 		t.Run(k, func(t *testing.T) {
 			assert.Equal(t, u.gvr, client.NewGVR(u.gvr).String())
+		})
+	}
+}
+
+func TestCanonical(t *testing.T) {
+	uu := map[string]struct {
+		gvr, e *client.GVR
+	}{
+		"canonical": {
+			gvr: client.CjGVR,
+			e:   client.CjGVR,
+		},
+		"cronjob": {
+			gvr: client.NewGVR("batch/v1beta1/cronjobs"),
+			e:   client.CjGVR,
+		},
+		"events": {
+			gvr: client.NewGVR("v1/events"),
+			e:   client.EvGVR,
+		},
+		"ingress": {
+			gvr: client.NewGVR("extensions/v1beta1/ingresses"),
+			e:   client.IngGVR,
+		},
+		"unknown": {
+			gvr: client.NewGVR("fred.io/v1/blees"),
+			e:   client.NewGVR("fred.io/v1/blees"),
+		},
+	}
+
+	for k := range uu {
+		u := uu[k]
+		t.Run(k, func(t *testing.T) {
+			assert.Same(t, u.e, client.Canonical(u.gvr))
+		})
+	}
+}
+
+func TestCRDFromUnstructured(t *testing.T) {
+	uu := map[string]struct {
+		spec map[string]any
+		e    []string
+	}{
+		"v1": {
+			spec: map[string]any{
+				"versions": []any{
+					map[string]any{"name": "v1", "served": true, "storage": true},
+					map[string]any{"name": "v2", "served": true},
+				},
+			},
+			e: []string{"v1", "v2"},
+		},
+		"v1beta1": {
+			spec: map[string]any{"version": "v1alpha1"},
+			e:    []string{"v1alpha1"},
+		},
+		"none": {
+			spec: map[string]any{},
+		},
+	}
+
+	for k := range uu {
+		u := uu[k]
+		t.Run(k, func(t *testing.T) {
+			crd, err := client.CRDFromUnstructured(map[string]any{
+				"metadata": map[string]any{"name": "blees.fred.io"},
+				"spec":     u.spec,
+			})
+			require.NoError(t, err)
+
+			var vv []string
+			for _, v := range crd.Spec.Versions {
+				assert.True(t, v.Served)
+				vv = append(vv, v.Name)
+			}
+			assert.Equal(t, u.e, vv)
 		})
 	}
 }

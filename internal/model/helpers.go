@@ -30,7 +30,7 @@ func getMeta(ctx context.Context, gvr *client.GVR) (ResourceMeta, error) {
 }
 
 func resourceMeta(gvr *client.GVR) ResourceMeta {
-	meta, ok := Registry[gvr]
+	meta, ok := Registry[client.Canonical(gvr)]
 	if !ok {
 		meta = ResourceMeta{
 			DAO:      new(dao.Table),

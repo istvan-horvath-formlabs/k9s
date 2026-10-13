@@ -102,6 +102,11 @@ func (a *Alias) load(path string) error {
 			a.Define(gvr, meta.ShortNames...)
 		}
 		a.Define(gvr, gvr.String())
+
+		// Older clusters may only serve a legacy version, route canonical commands to it.
+		if c := client.Canonical(gvr); c != gvr {
+			a.Define(gvr, c.String(), c.AsResourceName())
+		}
 	}
 
 	for _, gvr := range crdGVRS {

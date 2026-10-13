@@ -17,7 +17,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
@@ -49,6 +48,19 @@ var scalableRes = sets.New(client.DpGVR, client.StsGVR, client.RsGVR, client.RcG
 
 // ResourceMetas represents a collection of resource metadata.
 type ResourceMetas map[*client.GVR]*metav1.APIResource
+
+func (m ResourceMetas) served(gvr *client.GVR) *client.GVR {
+	if _, ok := m[gvr]; ok {
+		return gvr
+	}
+	for _, l := range client.LegacyGVRs[gvr] {
+		if _, ok := m[l]; ok {
+			return l
+		}
+	}
+
+	return gvr
+}
 
 func (m ResourceMetas) clear() {
 	for k := range m {
@@ -124,6 +136,15 @@ func (m *Meta) IsNamespaced(gvr *client.GVR) (bool, error) {
 	}
 
 	return res.Namespaced, nil
+}
+
+// Served returns the version of a resource the cluster serves. Older clusters may
+// only serve a legacy version of a canonical GVR.
+func (m *Meta) Served(gvr *client.GVR) *client.GVR {
+	m.mx.RLock()
+	defer m.mx.RUnlock()
+
+	return m.resMetas.served(gvr)
 }
 
 // MetaFor returns a resource metadata for a given gvr.
@@ -338,7 +359,7 @@ func loadPreferred(f Factory, m ResourceMetas) error {
 		for i := range r.APIResources {
 			res := r.APIResources[i]
 			gvr := client.FromGVAndR(r.GroupVersion, res.Name)
-			if isDeprecated(gvr) {
+			if gvr.V() == "" {
 				continue
 			}
 			res.Group, res.Version = gvr.G(), gvr.V()
@@ -354,8 +375,27 @@ func loadPreferred(f Factory, m ResourceMetas) error {
 			m[gvr] = &res
 		}
 	}
+	dropShadowed(m)
 
 	return nil
+}
+
+// dropShadowed keeps a single API version for resources served under several
+// groups or versions, preferring the canonical GVR over legacy ones.
+func dropShadowed(m ResourceMetas) {
+	for gvr, legacy := range client.LegacyGVRs {
+		_, keep := m[gvr]
+		for _, l := range legacy {
+			if _, ok := m[l]; !ok {
+				continue
+			}
+			if keep {
+				delete(m, l)
+				continue
+			}
+			keep = true
+		}
+	}
 }
 
 func isStandardGroup(gv string) bool {
@@ -366,35 +406,25 @@ func isScalable(gvr *client.GVR) bool {
 	return scalableRes.Has(gvr)
 }
 
-var deprecatedGVRs = sets.New(
-	client.NewGVR("v1/events"),
-	client.NewGVR("extensions/v1beta1/ingresses"),
-)
-
-func isDeprecated(gvr *client.GVR) bool {
-	return deprecatedGVRs.Has(gvr) || gvr.V() == ""
-}
-
 // loadCRDs Wait for the cache to synced and then add some additional properties to CRD.
 func loadCRDs(f Factory, m ResourceMetas) {
 	if f == nil || f.Client() == nil || !f.Client().ConnectionOK() {
 		return
 	}
 
-	oo, err := f.List(client.CrdGVR, client.ClusterScope, true, labels.Everything())
+	oo, err := f.List(m.served(client.CrdGVR), client.ClusterScope, true, labels.Everything())
 	if err != nil {
 		slog.Warn("CRDs load Fail", slogs.Error, err)
 		return
 	}
 
 	for _, o := range oo {
-		var crd apiext.CustomResourceDefinition
-		err = runtime.DefaultUnstructuredConverter.FromUnstructured(o.(*unstructured.Unstructured).Object, &crd)
+		crd, err := client.CRDFromUnstructured(o.(*unstructured.Unstructured).Object)
 		if err != nil {
 			slog.Error("CRD conversion failed", slogs.Error, err)
 			continue
 		}
-		addCRDProperties(m, &crd)
+		addCRDProperties(m, crd)
 	}
 }
 

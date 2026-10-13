@@ -15,6 +15,8 @@ import (
 	"gopkg.in/yaml.v3"
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -117,6 +119,26 @@ func NewGVRFromCRD(crd *apiext.CustomResourceDefinition) map[*GVR]*apiext.Custom
 	}
 
 	return mm
+}
+
+// CRDFromUnstructured converts a custom resource definition served either as
+// apiextensions.k8s.io/v1 or v1beta1. Older v1beta1 CRDs only declare a single
+// spec.version, which is surfaced as the only served version.
+func CRDFromUnstructured(o map[string]any) (*apiext.CustomResourceDefinition, error) {
+	var crd apiext.CustomResourceDefinition
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(o, &crd); err != nil {
+		return nil, err
+	}
+	if len(crd.Spec.Versions) > 0 {
+		return &crd, nil
+	}
+	if v, ok, _ := unstructured.NestedString(o, "spec", "version"); ok && v != "" {
+		crd.Spec.Versions = []apiext.CustomResourceDefinitionVersion{
+			{Name: v, Served: true, Storage: true},
+		}
+	}
+
+	return &crd, nil
 }
 
 // FromGVAndR builds a gvr from a group/version and resource.

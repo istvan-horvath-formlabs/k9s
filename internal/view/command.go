@@ -326,7 +326,7 @@ func (c *Command) viewMetaFor(p *cmd.Interpreter) (*client.GVR, *MetaViewer, *cm
 			return NewScaleExtender(NewOwnerExtender(NewBrowser(gvr)))
 		},
 	}
-	if mv, ok := customViewers[gvr]; ok {
+	if mv, ok := customViewers[client.Canonical(gvr)]; ok {
 		v = mv
 	}
 

@@ -151,22 +151,25 @@ func (c *CronJob) ToggleSuspend(ctx context.Context, path string) error {
 		return fmt.Errorf("user is not authorized to (un)suspend cronjobs")
 	}
 
-	dial, err := c.Client().Dial()
+	// Use the dynamic client so older clusters serving batch/v1beta1 work too.
+	dial, err := c.Client().DynDial()
 	if err != nil {
 		return err
 	}
-	cj, err := dial.BatchV1().CronJobs(ns).Get(ctx, n, metav1.GetOptions{})
+	res := dial.Resource(c.gvr.GVR()).Namespace(ns)
+	cj, err := res.Get(ctx, n, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
-	if cj.Spec.Suspend != nil {
-		current := !*cj.Spec.Suspend
-		cj.Spec.Suspend = &current
-	} else {
-		trueVal := true
-		cj.Spec.Suspend = &trueVal
+	suspended, _, err := unstructured.NestedBool(cj.Object, "spec", "suspend")
+	if err != nil {
+		return err
 	}
-	_, err = dial.BatchV1().CronJobs(ns).Update(ctx, cj, metav1.UpdateOptions{})
+	err = unstructured.SetNestedField(cj.Object, !suspended, "spec", "suspend")
+	if err != nil {
+		return err
+	}
+	_, err = res.Update(ctx, cj, metav1.UpdateOptions{})
 
 	return err
 }

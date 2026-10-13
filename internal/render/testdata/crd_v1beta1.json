@@ -1,0 +1,21 @@
+{
+  "apiVersion": "apiextensions.k8s.io/v1beta1",
+  "kind": "CustomResourceDefinition",
+  "metadata": {
+    "creationTimestamp": "2018-11-26T14:25:46Z",
+    "name": "certificates.certmanager.k8s.io",
+    "uid": "6f0f0d0e-f1a5-11e8-9b1c-0a1b2c3d4e5f"
+  },
+  "spec": {
+    "group": "certmanager.k8s.io",
+    "names": {
+      "kind": "Certificate",
+      "listKind": "CertificateList",
+      "plural": "certificates",
+      "shortNames": ["cert", "certs"],
+      "singular": "certificate"
+    },
+    "scope": "Namespaced",
+    "version": "v1alpha1"
+  }
+}
