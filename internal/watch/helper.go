@@ -10,7 +10,20 @@ import (
 	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 )
+
+// noWatchList opts informers out of client-go streaming lists. Older API
+// servers ignore sendInitialEvents and never send the closing bookmark, so
+// informers would never sync.
+type noWatchList struct {
+	dynamic.Interface
+}
+
+// IsWatchListSemanticsUnSupported is checked by client-go reflectors.
+func (noWatchList) IsWatchListSemanticsUnSupported() bool {
+	return true
+}
 
 func toGVR(gvr string) schema.GroupVersionResource {
 	tokens := strings.Split(gvr, "/")

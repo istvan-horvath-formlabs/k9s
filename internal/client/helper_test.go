@@ -9,6 +9,7 @@ import (
 	"github.com/derailed/k9s/internal/client"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/version"
 )
 
 func TestMetaFQN(t *testing.T) {
@@ -224,5 +225,45 @@ func TestFQN(t *testing.T) {
 
 	for _, u := range uu {
 		assert.Equal(t, u.e, client.FQN(u.ns, u.n))
+	}
+}
+
+func TestSupportsWatchList(t *testing.T) {
+	uu := map[string]struct {
+		info *version.Info
+		e    bool
+	}{
+		"nil": {
+			e: true,
+		},
+		"garbage": {
+			info: &version.Info{GitVersion: "blee"},
+			e:    true,
+		},
+		"1.10": {
+			info: &version.Info{GitVersion: "v1.10.11"},
+		},
+		"1.26": {
+			info: &version.Info{GitVersion: "v1.26.0"},
+		},
+		"1.27": {
+			info: &version.Info{GitVersion: "v1.27.0"},
+			e:    true,
+		},
+		"1.27-gke": {
+			info: &version.Info{GitVersion: "v1.27.3-gke.100"},
+			e:    true,
+		},
+		"1.37": {
+			info: &version.Info{GitVersion: "v1.37.1"},
+			e:    true,
+		},
+	}
+
+	for k := range uu {
+		u := uu[k]
+		t.Run(k, func(t *testing.T) {
+			assert.Equal(t, u.e, client.SupportsWatchList(u.info))
+		})
 	}
 }

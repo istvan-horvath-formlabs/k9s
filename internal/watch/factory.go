@@ -283,6 +283,9 @@ func (f *Factory) ensureFactory(ns string) (di.DynamicSharedInformerFactory, err
 	if err != nil {
 		return nil, err
 	}
+	if info, err := f.client.ServerVersion(); err == nil && !client.SupportsWatchList(info) {
+		dial = noWatchList{Interface: dial}
+	}
 	f.factories[ns] = di.NewFilteredDynamicSharedInformerFactory(
 		dial,
 		defaultResync,

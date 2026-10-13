@@ -13,9 +13,30 @@ import (
 
 	"github.com/derailed/k9s/internal/slogs"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	utilversion "k8s.io/apimachinery/pkg/util/version"
+	"k8s.io/apimachinery/pkg/version"
 )
 
+// minWatchListVersion is the first API server release that knows about
+// streaming lists. Older servers silently ignore the sendInitialEvents param.
+var minWatchListVersion = utilversion.MajorMinor(1, 27)
+
 var toFileName = regexp.MustCompile(`[^(\w/.)]`)
+
+// SupportsWatchList returns true if the API server either serves streaming lists
+// or rejects the request so client-go can fall back to a regular list.
+// Unknown versions are assumed to be recent.
+func SupportsWatchList(info *version.Info) bool {
+	if info == nil {
+		return true
+	}
+	v, err := utilversion.ParseGeneric(info.GitVersion)
+	if err != nil {
+		return true
+	}
+
+	return v.AtLeast(minWatchListVersion)
+}
 
 // IsClusterWide returns true if ns designates cluster scope, false otherwise.
 func IsClusterWide(ns string) bool {
